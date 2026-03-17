@@ -2041,6 +2041,7 @@ def order_data(years: list, technology_dataframe: pd.DataFrame) -> pd.DataFrame:
                 | (df.unit == "EUR/MW input")
                 | (df.unit == "EUR/t_N2/h")  # air separation unit
                 | (df.unit == "EUR/MW_biochar")
+                | (df.unit == "EUR/MW_H2")
             )
         ].copy()
 
@@ -2126,6 +2127,7 @@ def order_data(years: list, technology_dataframe: pd.DataFrame) -> pd.DataFrame:
                 | (df.unit == "EUR/MWhoutput")
                 | (df.unit == "EUR/MWh_CH4")
                 | (df.unit == "EUR/MWh_biochar")
+                | (df.unit == "EUR/MWh_H2")
                 | (tech_name == "biogas upgrading")
             )
         ].copy()
@@ -2318,6 +2320,30 @@ def order_data(years: list, technology_dataframe: pd.DataFrame) -> pd.DataFrame:
             ].copy()
             efficiency_heat["parameter"] = "efficiency-heat"
             clean_df[tech_name] = pd.concat([clean_df[tech_name], efficiency_heat])
+
+        elif tech_name == "methane pyrolysis plasma":
+            # H2 output efficiency (% of total CH4+el input → per unit via convert_units)
+            eff_h2 = efficiency[
+                efficiency.index.str.contains("Hydrogen Gas Output")
+            ].copy()
+            eff_h2["parameter"] = "efficiency"
+            clean_df[tech_name] = pd.concat([clean_df[tech_name], eff_h2])
+            # Heat recovery per MWh_H2
+            eff_heat = df[df.index.str.contains("efficiency-heat")].copy()
+            eff_heat["parameter"] = "efficiency-heat"
+            clean_df[tech_name] = pd.concat([clean_df[tech_name], eff_heat])
+            # Electricity input per MWh_H2
+            elec_inp = df[df.index.str.contains("electricity-input")].copy()
+            elec_inp["parameter"] = "electricity-input"
+            clean_df[tech_name] = pd.concat([clean_df[tech_name], elec_inp])
+            # Net methane input per MWh_H2
+            ch4_inp = df[df.index.str.contains("methane-input")].copy()
+            ch4_inp["parameter"] = "methane-input"
+            clean_df[tech_name] = pd.concat([clean_df[tech_name], ch4_inp])
+            # CO2 stored (tCO2/MWh_H2) — stoichiometric from carbon black
+            co2_stored = df[df.index.str.contains("CO2 stored")].copy()
+            co2_stored["parameter"] = "CO2 stored"
+            clean_df[tech_name] = pd.concat([clean_df[tech_name], co2_stored])
 
         elif len(efficiency) != 1:
             switch = True
