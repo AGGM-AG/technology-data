@@ -994,6 +994,9 @@ def get_data_DEA(
     if "biochar pyrolysis" in tech_name:
         df = biochar_pyrolysis_harmonise_dea(df)
 
+    elif tech_name == "methane pyrolysis plasma":
+        df = methane_pyrolysis_plasma_harmonise_dea(df)
+
     elif tech_name == "central geothermal heat source":
         # we need to convert from costs per MW of the entire system (including heat pump)
         # to costs per MW of the geothermal heat source only
@@ -1324,6 +1327,100 @@ def unify_diw(cost_dataframe: pd.DataFrame) -> pd.DataFrame:
     cost_dataframe.loc[("hydro", "investment"), "currency_year"] = 2010
 
     return cost_dataframe
+
+
+def methane_pyrolysis_plasma_harmonise_dea(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Harmonise DEA sheet '104 Methane pyrolysis, Plasma'.
+
+    All energy flows are given in % of total input (CH4 + electricity = 100 %).
+    This function:
+      - Drops the 2020 column (technology not available before 2030, DEA Note A).
+      - Computes net CH4 input = Natural Gas input − recycled Methane Output
+        (DEA Note M: unconverted methane is recycled internally).
+      - Normalises net CH4 input and electricity input to per-MWh_H2 output.
+      - Adds a 'CO2 stored' row derived stoichiometrically from the carbon black output
+        (DEA Note N: LHV carbon black = 28 MJ/kg → 128.6 kg_C / MWh_Cblack;
+         CO2/C mass ratio = 44/12; result in tCO2/MWh_H2).
+      - Renames cost rows to use standardised unit tags (MW_H2, MWh_H2).
+    """
+    # 1. Drop 2020 — technology not available before 2030 (DEA Note A)
+    if 2020 in df.columns:
+        df.drop(columns=2020, inplace=True)
+
+    # helper: locate rows by substring (returns Series for arithmetic)
+    def _row(pattern):
+        return df.loc[df.index.str.contains(pattern, regex=False)].squeeze()
+
+    h2_out = _row("Hydrogen Gas Output")         # % of total input
+    ch4_in = _row("Natural Gas")                  # % of total input (gross)
+    recycled = _row("Methane Output")             # % of total input (recycled, Note M)
+    elec_in = _row("Electricity")                 # % of total input
+    heat_out = _row("Recovered Heat")             # % of total input
+    cblack = _row("Carbon Black Output")          # % of total input
+
+    # 2. Net CH4 input per MWh_H2
+    net_ch4_per_h2 = (ch4_in - recycled) / h2_out
+    net_ch4_per_h2.name = "methane-input [MWh_CH4/MWh_H2]"
+
+    # 3. Electricity input per MWh_H2
+    elec_per_h2 = elec_in / h2_out
+    elec_per_h2.name = "electricity-input [MWh_el/MWh_H2]"
+
+    # 4. Heat output per MWh_H2
+    heat_per_h2 = heat_out / h2_out
+    heat_per_h2.name = "efficiency-heat [% MWh_H2]"
+
+    # 5. H2 efficiency (% of total input → keep as %, converted to per unit later)
+    h2_eff = h2_out.copy()
+    h2_eff.name = "Hydrogen Gas Output [% of total input]"
+
+    # 6. CO2 stored — stoichiometric from carbon black (DEA Note N)
+    #    LHV_Cblack = 28 MJ/kg = 28/3.6 kWh/kg → 1 MWh_Cblack = 3600/28 kg_C = 128.571 kg_C
+    #    CO2/C = 44/12; result tCO2/MWh_H2
+    kg_C_per_MWh_Cblack = 3600 / 28  # ≈ 128.571
+    co2_stored = (cblack / h2_out) * kg_C_per_MWh_Cblack * (44 / 12) / 1000
+    co2_stored.name = "CO2 stored [tCO2/MWh_H2]"
+
+    # 7. Rename cost rows to standard unit tags
+    inv_old = df.index[df.index.str.contains("Specific investment")][0]
+    fom_old = df.index[df.index.str.contains("Fixed O&M")][0]
+    vom_old = df.index[df.index.str.contains("Variable O&M")][0]
+    df.rename(
+        index={
+            inv_old: "Specific investment [MEUR/MW_H2]",
+            fom_old: "Fixed O&M [EUR/MW_H2/year]",
+            vom_old: "Variable O&M [EUR/MWh_H2]",
+        },
+        inplace=True,
+    )
+
+    # 8. Drop raw input/output rows; replace with normalised ones
+    to_drop = df.index[
+        df.index.str.contains("Natural Gas")
+        | df.index.str.contains("Methane Output")
+        | df.index.str.contains("Electricity")
+        | df.index.str.contains("Recovered Heat")
+        | df.index.str.contains("Carbon Black Output")
+        | df.index.str.contains("Hydrogen Gas Output")
+        | df.index.str.contains("Heat loss")
+        | df.index.str.contains("Output$", regex=True)     # bare "Output" rows
+        | df.index.str.contains("Inputs")
+        | df.index.str.contains("Typical total")
+        | df.index.str.contains("Forced outage")
+        | df.index.str.contains("Planned outage")
+        | df.index.str.contains("Construction time")
+        | df.index.str.contains("hereof equipment")
+        | df.index.str.contains("hereof installation")
+        | df.index.str.contains("Startup cost")
+    ]
+    df.drop(to_drop, inplace=True)
+
+    # 9. Append derived rows
+    for row in [net_ch4_per_h2, elec_per_h2, heat_per_h2, h2_eff, co2_stored]:
+        df.loc[row.name] = row
+
+    return df
 
 
 def biochar_pyrolysis_harmonise_dea(df: pd.DataFrame) -> pd.DataFrame:
