@@ -152,6 +152,7 @@ dea_sheet_names = {
     "biochar pyrolysis": "105 Slow pyrolysis, Straw",
     "electrolysis small": "86 AEC 10 MW",
     "gas storage": "150 Underground Storage of Gas",
+    "methane pyrolysis plasma": "104 Methane pyrolysis, Plasma",
 }
 # [DEA-sheet-names]
 
@@ -225,6 +226,7 @@ uncrtnty_lookup = {
     "biomethanation": "J:K",
     "electrolysis small": "I:J",
     "gas storage": "",
+    "methane pyrolysis plasma": "I:J",
 }
 
 # since February 2022 DEA uses a new format for the technology data
@@ -251,6 +253,7 @@ cost_year_2020 = [
     "Fischer-Tropsch",
     "biochar pyrolysis",
     "biomethanation",
+    "methane pyrolysis plasma",
     "electrolysis small",
     "central water pit storage",
     "central water tank storage",
