@@ -820,8 +820,10 @@ def get_data_DEA(
     if tech_name == "methane pyrolysis plasma":
         parameters += [
             "Natural Gas",            # "Natural Gas (% total input[MWh/MWh])"
+            "Electricity (",          # "Electricity (% total input[MWh/MWh])"
             "Hydrogen Gas Output",    # "Hydrogen Gas Output (% total input [MWh/MWh])"
             "Carbon Black Output",    # "Carbon Black Output (% total input [MWh/MWh])"
+            "Methane Output",         # "Methane Output (% total input [MWh/MWh])" (recycled)
             "Recovered Heat",         # "Recovered Heat (% total input [MWh/MWh])"
             "Methane conversion",     # "\xa0Methane conversion [%]"
         ]
@@ -1367,11 +1369,11 @@ def methane_pyrolysis_plasma_harmonise_dea(df: pd.DataFrame) -> pd.DataFrame:
     elec_per_h2 = elec_in / h2_out
     elec_per_h2.name = "electricity-input [MWh_el/MWh_H2]"
 
-    # 4. Heat output per MWh_H2
-    heat_per_h2 = heat_out / h2_out
+    # 4. Heat output per MWh_H2 — kept as % so convert_units() /100 gives correct per-unit
+    heat_per_h2 = (heat_out / h2_out) * 100
     heat_per_h2.name = "efficiency-heat [% MWh_H2]"
 
-    # 5. H2 efficiency (% of total input → keep as %, converted to per unit later)
+    # 5. H2 efficiency — raw % value; convert_units() divides by 100 to get per-unit
     h2_eff = h2_out.copy()
     h2_eff.name = "Hydrogen Gas Output [% of total input]"
 
@@ -1416,9 +1418,18 @@ def methane_pyrolysis_plasma_harmonise_dea(df: pd.DataFrame) -> pd.DataFrame:
     ]
     df.drop(to_drop, inplace=True)
 
-    # 9. Append derived rows
-    for row in [net_ch4_per_h2, elec_per_h2, heat_per_h2, h2_eff, co2_stored]:
-        df.loc[row.name] = row
+    # 9. Append derived rows — use explicit column alignment to avoid index mismatch
+    new_rows = pd.DataFrame(
+        {
+            net_ch4_per_h2.name: net_ch4_per_h2.values,
+            elec_per_h2.name: elec_per_h2.values,
+            heat_per_h2.name: heat_per_h2.values,
+            h2_eff.name: h2_eff.values,
+            co2_stored.name: co2_stored.values,
+        },
+        index=df.columns,
+    ).T
+    df = pd.concat([df, new_rows])
 
     return df
 
@@ -2322,10 +2333,8 @@ def order_data(years: list, technology_dataframe: pd.DataFrame) -> pd.DataFrame:
             clean_df[tech_name] = pd.concat([clean_df[tech_name], efficiency_heat])
 
         elif tech_name == "methane pyrolysis plasma":
-            # H2 output efficiency (% of total CH4+el input → per unit via convert_units)
-            eff_h2 = efficiency[
-                efficiency.index.str.contains("Hydrogen Gas Output")
-            ].copy()
+            # H2 output efficiency — pull from df directly (unit doesn't pass generic filter)
+            eff_h2 = df[df.index.str.contains("Hydrogen Gas Output")].copy()
             eff_h2["parameter"] = "efficiency"
             clean_df[tech_name] = pd.concat([clean_df[tech_name], eff_h2])
             # Heat recovery per MWh_H2
