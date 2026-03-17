@@ -73,6 +73,8 @@ source_dict = {
     "IEA": "IEA Global average levelised cost of hydrogen production by energy source and technology, 2019 and 2050 (2020), https://www.iea.org/data-and-statistics/charts/global-average-levelised-cost-of-hydrogen-production-by-energy-source-and-technology-2019-and-2050",
     # SMR capture rate
     "Timmerberg": "Hydrogen and hydrogen-derived fuels through methane decomposition of natural gas – GHG emissions and costs Timmerberg et al. (2020), https://doi.org/10.1016/j.ecmx.2020.100043",
+    # methane pyrolysis plasma
+    "DEA-renewable-fuels": "Danish Energy Agency, Technology Data for Renewable Fuels (2024), https://ens.dk/media/7824/download",
     # geothermal (enhanced geothermal systems)
     "Aghahosseini2020": "Aghahosseini, Breyer 2020: From hot rock to useful energy: A global estimate of enhanced geothermal systems potential, https://www.sciencedirect.com/science/article/pii/S0306261920312551",
     # review of existing deep geothermal projects
@@ -814,6 +816,15 @@ def get_data_DEA(
 
     if tech_name == "methanolisation":
         parameters += ["District heating"]
+
+    if tech_name == "methane pyrolysis plasma":
+        parameters += [
+            "Natural Gas",            # "Natural Gas (% total input[MWh/MWh])"
+            "Hydrogen Gas Output",    # "Hydrogen Gas Output (% total input [MWh/MWh])"
+            "Carbon Black Output",    # "Carbon Black Output (% total input [MWh/MWh])"
+            "Recovered Heat",         # "Recovered Heat (% total input [MWh/MWh])"
+            "Methane conversion",     # "\xa0Methane conversion [%]"
+        ]
 
     if tech_name == "Fischer-Tropsch":
         parameters += ["District Heat  Output,"]
