@@ -1,0 +1,30 @@
+[workspace]
+channels = ["conda-forge", "bioconda"]
+name = "technology-data"
+platforms = ["win-64"]
+version = "0.1.0"
+
+[tasks]
+
+[dependencies]
+python = ">=3.10"
+pip = "*"
+snakemake-minimal = ">=8.5"
+pandas = ">=2.1,<3"
+pypsa = "*"
+pyarrow = "*"
+numpy = "*"
+beautifulsoup4 = "*"
+xlrd = "*"
+scipy = "*"
+openpyxl = ">=3.1.2"
+python-calamine = "*"
+packaging = "*"
+pytest = "*"
+pre-commit = "*"
+ruff = "*"
+ipykernel = "*"
+
+[pypi-dependencies]
+tabula-py = "*"
+currencyconverter = "*"
