@@ -1345,10 +1345,24 @@ def methane_pyrolysis_plasma_harmonise_dea(df: pd.DataFrame) -> pd.DataFrame:
         (DEA Note N: LHV carbon black = 28 MJ/kg → 128.6 kg_C / MWh_Cblack;
          CO2/C mass ratio = 44/12; result in tCO2/MWh_H2).
       - Renames cost rows to use standardised unit tags (MW_H2, MWh_H2).
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Raw DEA technology dataframe for sheet '104 Methane pyrolysis, Plasma'
+        as returned by ``get_data_DEA``. Rows are DEA parameter labels,
+        columns are model years (integers).
+
+    Returns
+    -------
+    pd.DataFrame
+        Harmonised dataframe with normalised energy-flow rows (per MWh_H2),
+        standardised cost-row names, and a derived 'CO2 stored' row.
+        Raw input/output rows are removed.
     """
     # 1. Drop 2020 — technology not available before 2030 (DEA Note A)
     if 2020 in df.columns:
-        df.drop(columns=2020, inplace=True)
+        df = df.drop(columns=2020)
 
     # helper: locate rows by substring (returns Series for arithmetic)
     def _row(pattern):
@@ -1388,13 +1402,12 @@ def methane_pyrolysis_plasma_harmonise_dea(df: pd.DataFrame) -> pd.DataFrame:
     inv_old = df.index[df.index.str.contains("Specific investment")][0]
     fom_old = df.index[df.index.str.contains("Fixed O&M")][0]
     vom_old = df.index[df.index.str.contains("Variable O&M")][0]
-    df.rename(
+    df = df.rename(
         index={
             inv_old: "Specific investment [MEUR/MW_H2]",
             fom_old: "Fixed O&M [EUR/MW_H2/year]",
             vom_old: "Variable O&M [EUR/MWh_H2]",
         },
-        inplace=True,
     )
 
     # 8. Drop raw input/output rows; replace with normalised ones
@@ -1416,7 +1429,7 @@ def methane_pyrolysis_plasma_harmonise_dea(df: pd.DataFrame) -> pd.DataFrame:
         | df.index.str.contains("hereof installation")
         | df.index.str.contains("Startup cost")
     ]
-    df.drop(to_drop, inplace=True)
+    df = df.drop(to_drop)
 
     # 9. Append derived rows — use explicit column alignment to avoid index mismatch
     new_rows = pd.DataFrame(
