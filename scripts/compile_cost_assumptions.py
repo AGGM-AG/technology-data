@@ -73,6 +73,8 @@ source_dict = {
     "IEA": "IEA Global average levelised cost of hydrogen production by energy source and technology, 2019 and 2050 (2020), https://www.iea.org/data-and-statistics/charts/global-average-levelised-cost-of-hydrogen-production-by-energy-source-and-technology-2019-and-2050",
     # SMR capture rate
     "Timmerberg": "Hydrogen and hydrogen-derived fuels through methane decomposition of natural gas – GHG emissions and costs Timmerberg et al. (2020), https://doi.org/10.1016/j.ecmx.2020.100043",
+    # methane pyrolysis plasma
+    "DEA-renewable-fuels": "Danish Energy Agency, Technology Data for Renewable Fuels (2024), https://ens.dk/media/7824/download",
     # geothermal (enhanced geothermal systems)
     "Aghahosseini2020": "Aghahosseini, Breyer 2020: From hot rock to useful energy: A global estimate of enhanced geothermal systems potential, https://www.sciencedirect.com/science/article/pii/S0306261920312551",
     # review of existing deep geothermal projects
@@ -152,6 +154,7 @@ dea_sheet_names = {
     "biochar pyrolysis": "105 Slow pyrolysis, Straw",
     "electrolysis small": "86 AEC 10 MW",
     "gas storage": "150 Underground Storage of Gas",
+    "methane pyrolysis plasma": "104 Methane pyrolysis, Plasma",
 }
 # [DEA-sheet-names]
 
@@ -225,6 +228,7 @@ uncrtnty_lookup = {
     "biomethanation": "J:K",
     "electrolysis small": "I:J",
     "gas storage": "",
+    "methane pyrolysis plasma": "I:J",
 }
 
 # since February 2022 DEA uses a new format for the technology data
@@ -251,6 +255,7 @@ cost_year_2020 = [
     "Fischer-Tropsch",
     "biochar pyrolysis",
     "biomethanation",
+    "methane pyrolysis plasma",
     "electrolysis small",
     "central water pit storage",
     "central water tank storage",
@@ -812,6 +817,17 @@ def get_data_DEA(
     if tech_name == "methanolisation":
         parameters += ["District heating"]
 
+    if tech_name == "methane pyrolysis plasma":
+        parameters += [
+            "Natural Gas",            # "Natural Gas (% total input[MWh/MWh])"
+            "Electricity (",          # "Electricity (% total input[MWh/MWh])"
+            "Hydrogen Gas Output",    # "Hydrogen Gas Output (% total input [MWh/MWh])"
+            "Carbon Black Output",    # "Carbon Black Output (% total input [MWh/MWh])"
+            "Methane Output",         # "Methane Output (% total input [MWh/MWh])" (recycled)
+            "Recovered Heat",         # "Recovered Heat (% total input [MWh/MWh])"
+            "Methane conversion",     # "Methane conversion [%]"
+        ]
+
     if tech_name == "Fischer-Tropsch":
         parameters += ["District Heat  Output,"]
 
@@ -979,6 +995,9 @@ def get_data_DEA(
 
     if "biochar pyrolysis" in tech_name:
         df = biochar_pyrolysis_harmonise_dea(df)
+
+    elif tech_name == "methane pyrolysis plasma":
+        df = methane_pyrolysis_plasma_harmonise_dea(df)
 
     elif tech_name == "central geothermal heat source":
         # we need to convert from costs per MW of the entire system (including heat pump)
@@ -1310,6 +1329,122 @@ def unify_diw(cost_dataframe: pd.DataFrame) -> pd.DataFrame:
     cost_dataframe.loc[("hydro", "investment"), "currency_year"] = 2010
 
     return cost_dataframe
+
+
+def methane_pyrolysis_plasma_harmonise_dea(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Harmonise DEA sheet '104 Methane pyrolysis, Plasma'.
+
+    All energy flows are given in % of total input (CH4 + electricity = 100 %).
+    This function:
+      - Drops the 2020 column (technology not available before 2030, DEA Note A).
+      - Computes net CH4 input = Natural Gas input − recycled Methane Output
+        (DEA Note M: unconverted methane is recycled internally).
+      - Normalises net CH4 input and electricity input to per-MWh_H2 output.
+      - Adds a 'CO2 stored' row derived stoichiometrically from the carbon black output
+        (DEA Note N: LHV carbon black = 28 MJ/kg → 128.6 kg_C / MWh_Cblack;
+         CO2/C mass ratio = 44/12; result in tCO2/MWh_H2).
+      - Renames cost rows to use standardised unit tags (MW_H2, MWh_H2).
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Raw DEA technology dataframe for sheet '104 Methane pyrolysis, Plasma'
+        as returned by ``get_data_DEA``. Rows are DEA parameter labels,
+        columns are model years (integers).
+
+    Returns
+    -------
+    pd.DataFrame
+        Harmonised dataframe with normalised energy-flow rows (per MWh_H2),
+        standardised cost-row names, and a derived 'CO2 stored' row.
+        Raw input/output rows are removed.
+    """
+    # 1. Drop 2020 — technology not available before 2030 (DEA Note A)
+    if 2020 in df.columns:
+        df = df.drop(columns=2020)
+
+    # helper: locate rows by substring (returns Series for arithmetic)
+    def _row(pattern):
+        return df.loc[df.index.str.contains(pattern, regex=False)].squeeze()
+
+    h2_out = _row("Hydrogen Gas Output")         # % of total input
+    ch4_in = _row("Natural Gas")                  # % of total input (gross)
+    recycled = _row("Methane Output")             # % of total input (recycled, Note M)
+    elec_in = _row("Electricity")                 # % of total input
+    heat_out = _row("Recovered Heat")             # % of total input
+    cblack = _row("Carbon Black Output")          # % of total input
+
+    # 2. Net CH4 input per MWh_H2
+    net_ch4_per_h2 = (ch4_in - recycled) / h2_out
+    net_ch4_per_h2.name = "methane-input [MWh_CH4/MWh_H2]"
+
+    # 3. Electricity input per MWh_H2
+    elec_per_h2 = elec_in / h2_out
+    elec_per_h2.name = "electricity-input [MWh_el/MWh_H2]"
+
+    # 4. Heat output per MWh_H2 — kept as % so convert_units() /100 gives correct per-unit
+    heat_per_h2 = (heat_out / h2_out) * 100
+    heat_per_h2.name = "efficiency-heat [% MWh_H2]"
+
+    # 5. H2 efficiency — raw % value; convert_units() divides by 100 to get per-unit
+    h2_eff = h2_out.copy()
+    h2_eff.name = "Hydrogen Gas Output [% of total input]"
+
+    # 6. CO2 stored — stoichiometric from carbon black (DEA Note N)
+    #    LHV_Cblack = 28 MJ/kg = 28/3.6 kWh/kg → 1 MWh_Cblack = 3600/28 kg_C = 128.571 kg_C
+    #    CO2/C = 44/12; result tCO2/MWh_H2
+    kg_C_per_MWh_Cblack = 3600 / 28  # ≈ 128.571
+    co2_stored = (cblack / h2_out) * kg_C_per_MWh_Cblack * (44 / 12) / 1000
+    co2_stored.name = "CO2 stored [tCO2/MWh_H2]"
+
+    # 7. Rename cost rows to standard unit tags
+    inv_old = df.index[df.index.str.contains("Specific investment")][0]
+    fom_old = df.index[df.index.str.contains("Fixed O&M")][0]
+    vom_old = df.index[df.index.str.contains("Variable O&M")][0]
+    df = df.rename(
+        index={
+            inv_old: "Specific investment [MEUR/MW_H2]",
+            fom_old: "Fixed O&M [EUR/MW_H2/year]",
+            vom_old: "Variable O&M [EUR/MWh_H2]",
+        },
+    )
+
+    # 8. Drop raw input/output rows; replace with normalised ones
+    to_drop = df.index[
+        df.index.str.contains("Natural Gas")
+        | df.index.str.contains("Methane Output")
+        | df.index.str.contains("Electricity")
+        | df.index.str.contains("Recovered Heat")
+        | df.index.str.contains("Carbon Black Output")
+        | df.index.str.contains("Hydrogen Gas Output")
+        | df.index.str.contains("Heat loss")
+        | df.index.str.contains("Output$", regex=True)     # bare "Output" rows
+        | df.index.str.contains("Inputs")
+        | df.index.str.contains("Typical total")
+        | df.index.str.contains("Forced outage")
+        | df.index.str.contains("Planned outage")
+        | df.index.str.contains("Construction time")
+        | df.index.str.contains("hereof equipment")
+        | df.index.str.contains("hereof installation")
+        | df.index.str.contains("Startup cost")
+    ]
+    df = df.drop(to_drop)
+
+    # 9. Append derived rows — use explicit column alignment to avoid index mismatch
+    new_rows = pd.DataFrame(
+        {
+            net_ch4_per_h2.name: net_ch4_per_h2.values,
+            elec_per_h2.name: elec_per_h2.values,
+            heat_per_h2.name: heat_per_h2.values,
+            h2_eff.name: h2_eff.values,
+            co2_stored.name: co2_stored.values,
+        },
+        index=df.columns,
+    ).T
+    df = pd.concat([df, new_rows])
+
+    return df
 
 
 def biochar_pyrolysis_harmonise_dea(df: pd.DataFrame) -> pd.DataFrame:
@@ -1930,6 +2065,7 @@ def order_data(years: list, technology_dataframe: pd.DataFrame) -> pd.DataFrame:
                 | (df.unit == "EUR/MW input")
                 | (df.unit == "EUR/t_N2/h")  # air separation unit
                 | (df.unit == "EUR/MW_biochar")
+                | (df.unit == "EUR/MW_H2")
             )
         ].copy()
 
@@ -2015,6 +2151,7 @@ def order_data(years: list, technology_dataframe: pd.DataFrame) -> pd.DataFrame:
                 | (df.unit == "EUR/MWhoutput")
                 | (df.unit == "EUR/MWh_CH4")
                 | (df.unit == "EUR/MWh_biochar")
+                | (df.unit == "EUR/MWh_H2")
                 | (tech_name == "biogas upgrading")
             )
         ].copy()
@@ -2207,6 +2344,28 @@ def order_data(years: list, technology_dataframe: pd.DataFrame) -> pd.DataFrame:
             ].copy()
             efficiency_heat["parameter"] = "efficiency-heat"
             clean_df[tech_name] = pd.concat([clean_df[tech_name], efficiency_heat])
+
+        elif tech_name == "methane pyrolysis plasma":
+            # H2 output efficiency — pull from df directly (unit doesn't pass generic filter)
+            eff_h2 = df[df.index.str.contains("Hydrogen Gas Output")].copy()
+            eff_h2["parameter"] = "efficiency"
+            clean_df[tech_name] = pd.concat([clean_df[tech_name], eff_h2])
+            # Heat recovery per MWh_H2
+            eff_heat = df[df.index.str.contains("efficiency-heat")].copy()
+            eff_heat["parameter"] = "efficiency-heat"
+            clean_df[tech_name] = pd.concat([clean_df[tech_name], eff_heat])
+            # Electricity input per MWh_H2
+            elec_inp = df[df.index.str.contains("electricity-input")].copy()
+            elec_inp["parameter"] = "electricity-input"
+            clean_df[tech_name] = pd.concat([clean_df[tech_name], elec_inp])
+            # Net methane input per MWh_H2
+            ch4_inp = df[df.index.str.contains("methane-input")].copy()
+            ch4_inp["parameter"] = "methane-input"
+            clean_df[tech_name] = pd.concat([clean_df[tech_name], ch4_inp])
+            # CO2 stored (tCO2/MWh_H2) — stoichiometric from carbon black
+            co2_stored = df[df.index.str.contains("CO2 stored")].copy()
+            co2_stored["parameter"] = "CO2 stored"
+            clean_df[tech_name] = pd.concat([clean_df[tech_name], co2_stored])
 
         elif len(efficiency) != 1:
             switch = True
