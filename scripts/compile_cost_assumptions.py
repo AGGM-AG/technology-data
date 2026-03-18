@@ -825,7 +825,7 @@ def get_data_DEA(
             "Carbon Black Output",    # "Carbon Black Output (% total input [MWh/MWh])"
             "Methane Output",         # "Methane Output (% total input [MWh/MWh])" (recycled)
             "Recovered Heat",         # "Recovered Heat (% total input [MWh/MWh])"
-            "Methane conversion",     # "\xa0Methane conversion [%]"
+            "Methane conversion",     # "Methane conversion [%]"
         ]
 
     if tech_name == "Fischer-Tropsch":
