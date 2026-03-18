@@ -1,0 +1,27 @@
+{
+    "name": "technology-data",
+    "build": {
+      "context": "..",
+      "dockerfile": "Dockerfile"
+    },
+    "mounts": [
+      "source=/mnt/storage,target=/mnt/storage,type=bind"
+    ],
+    "forwardPorts": [
+      2718
+    ],
+    "portsAttributes": {
+      "2718": {"label": "marimo"}
+    },
+    "postCreateCommand": "git fetch --unshallow && pixi run pre-commit install",
+    "postAttachCommand": "",
+    "customizations": {
+      "jetbrains": {
+        "backend": "PyCharm"
+      }
+    },
+    "containerEnv": {
+      "SHELL": "/bin/zsh"
+    },
+    "remoteUser": "root"
+  }
