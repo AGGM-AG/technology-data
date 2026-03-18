@@ -1352,7 +1352,19 @@ def methane_pyrolysis_plasma_harmonise_dea(df: pd.DataFrame) -> pd.DataFrame:
 
     # helper: locate rows by substring (returns Series for arithmetic)
     def _row(pattern):
-        return df.loc[df.index.str.contains(pattern, regex=False)].squeeze()
+        mask = df.index.str.contains(pattern, regex=False)
+        match_count = mask.sum()
+        if match_count == 0:
+            raise ValueError(
+                f"No row found matching pattern {pattern!r} in cost assumptions sheet"
+            )
+        if match_count > 1:
+            matched_labels = df.index[mask].tolist()
+            raise ValueError(
+                f"Multiple rows ({match_count}) found matching pattern {pattern!r} "
+                f"in cost assumptions sheet: {matched_labels}"
+            )
+        return df.loc[mask].squeeze()
 
     h2_out = _row("Hydrogen Gas Output")         # % of total input
     ch4_in = _row("Natural Gas")                  # % of total input (gross)
