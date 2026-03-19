@@ -1,7 +1,7 @@
 [workspace]
 channels = ["conda-forge", "bioconda"]
 name = "technology-data"
-platforms = ["win-64"]
+platforms = ["win-64", "linux-64"]
 version = "0.1.0"
 
 [tasks]
@@ -24,6 +24,7 @@ pytest = "*"
 pre-commit = "*"
 ruff = "*"
 ipykernel = "*"
+pixi-pycharm = ">=0.0.10,<0.0.11"
 
 [pypi-dependencies]
 tabula-py = "*"
