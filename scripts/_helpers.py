@@ -105,10 +105,13 @@ def mock_snakemake(
     import snakemake as sm
     from snakemake.api import Workflow
     from snakemake.common import SNAKEFILE_CHOICES
+    from snakemake.logging import LoggerManager
+    from snakemake.logging import logger as sm_logger
     from snakemake.script import Snakemake
     from snakemake.settings.types import (
         ConfigSettings,
         DAGSettings,
+        OutputSettings,
         ResourceSettings,
         StorageSettings,
         WorkflowSettings,
@@ -146,10 +149,12 @@ def mock_snakemake(
         workflow_settings = WorkflowSettings()
         storage_settings = StorageSettings()
         dag_settings = DAGSettings(rerun_triggers=[])
+        logger_manager = LoggerManager(sm_logger, OutputSettings())
         workflow = Workflow(
             config_settings,
             resource_settings,
             workflow_settings,
+            logger_manager,
             storage_settings,
             dag_settings,
             storage_provider_settings=dict(),
