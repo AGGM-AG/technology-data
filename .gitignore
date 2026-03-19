@@ -11,6 +11,8 @@ gurobi.log
 *.log
 */__pycache__
 
+outputs
+
 ## Core latex/pdflatex auxiliary files:
 *.aux
 *.lof
